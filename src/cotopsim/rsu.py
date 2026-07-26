@@ -22,56 +22,78 @@ class RSU:
                  coverage_radius,
                  neighbor_ids=None):
 
+        # -----------------------------------------------------
         # Identity and position
+        # -----------------------------------------------------
+
         self.rsu_id = rsu_id
-        self.x = x                          # metres
-        self.capacity = capacity            # Mcycles/s (1-4 Gcycles/s)
+        self.x = x
+        self.capacity = capacity              # Mcycles/s
         self.coverage_radius = coverage_radius
 
 
+        # -----------------------------------------------------
         # Neighbor RSUs
+        # -----------------------------------------------------
+
         self.neighbor_ids = neighbor_ids or []
-        self.neighbors = {}                  # {id: RSU}
+        self.neighbors = {}                   # {id: RSU}
 
 
-        # M/M/1 queue
+
+        # -----------------------------------------------------
+        # Computation queue
+        # -----------------------------------------------------
+
         self.task_queue = []
         self.current_task = None
+
         self.tasks_processed = 0
 
 
+
+        # -----------------------------------------------------
         # Completed tasks in current step
+        # -----------------------------------------------------
+
         self.completed_tasks = []
 
 
-        # R2R communication rates
+
+        # -----------------------------------------------------
+        # R2R communication cache
+        # -----------------------------------------------------
+
         self.r2r_rates = {}
 
 
 
-    # ---------------------------------------------------------
+    # =========================================================
     # Coverage
-    # ---------------------------------------------------------
+    # =========================================================
 
     def in_range(self, vehicle):
         """
         Check whether vehicle is inside RSU coverage.
         """
+
         distance = abs(self.x - vehicle.x)
 
         return distance <= self.coverage_radius
 
 
 
-    # ---------------------------------------------------------
+    # =========================================================
     # Queue calculation
-    # ---------------------------------------------------------
+    # =========================================================
 
     def queued_cycles(self):
         """
         Total remaining computation cycles.
 
-        N_queue(t) = waiting tasks + current processing task
+        N_queue(t)
+        =
+        waiting tasks + current processing task
         """
 
         total = sum(
@@ -81,6 +103,7 @@ class RSU:
 
 
         if self.current_task is not None:
+
             total += self.current_task.remaining_cycles
 
 
@@ -95,10 +118,11 @@ class RSU:
         T_wait = N_queue / F_RSU
 
         Unit:
-        Mcycles / (Mcycles/s) = seconds
+        seconds
         """
 
         if self.capacity <= 0:
+
             return float("inf")
 
 
@@ -106,18 +130,17 @@ class RSU:
 
 
 
-    # ---------------------------------------------------------
+    # =========================================================
     # Task management
-    # ---------------------------------------------------------
+    # =========================================================
 
     def accept_task(self, task, arrival_time):
         """
-        Add task into RSU computation queue.
+        Accept task into RSU queue.
         """
 
         task.arrival_time = arrival_time
 
-        # waiting caused by existing tasks
         task.waiting_delay = self.waiting_delay()
 
         task.queue_enter_time = arrival_time
@@ -131,48 +154,67 @@ class RSU:
 
 
 
-    # ---------------------------------------------------------
+    # =========================================================
     # Processing
-    # ---------------------------------------------------------
+    # =========================================================
 
     def tick(self, dt=1.0):
         """
-        Advance RSU computation by dt seconds.
+        Advance RSU computation.
 
-        Processing speed:
-            capacity * dt
+        Process:
+        cycles = capacity × time
         """
 
-        # Assign next task if idle
+        # -----------------------------------------------------
+        # Start next task if RSU idle
+        # -----------------------------------------------------
+
         if self.current_task is None:
 
             if self.task_queue:
 
                 self.current_task = self.task_queue.pop(0)
 
-                self.current_task.status = Task.STATUS_PROCESSING
+                self.current_task.status = (
+                    Task.STATUS_PROCESSING
+                )
+
 
 
         if self.current_task is None:
+
             return
 
 
 
-        # Compute cycles
+        # -----------------------------------------------------
+        # Execute computation
+        # -----------------------------------------------------
+
         cycles_processed = self.capacity * dt
 
         self.current_task.remaining_cycles -= cycles_processed
 
 
 
-        # Completion check
+        # -----------------------------------------------------
+        # Task completion
+        # -----------------------------------------------------
+
         if self.current_task.remaining_cycles <= 0:
+
 
             self.current_task.remaining_cycles = 0
 
-            self.current_task.status = Task.STATUS_COMPLETED
+
+            self.current_task.status = (
+                Task.STATUS_COMPLETED
+            )
+
 
             self.tasks_processed += 1
+
 
             self.completed_tasks.append(
                 self.current_task
@@ -183,11 +225,25 @@ class RSU:
 
 
 
-    # ---------------------------------------------------------
-    # Episode reset
-    # ---------------------------------------------------------
+            # Immediately start next task
+            if self.task_queue:
+
+                self.current_task = self.task_queue.pop(0)
+
+                self.current_task.status = (
+                    Task.STATUS_PROCESSING
+                )
+
+
+
+    # =========================================================
+    # Reset
+    # =========================================================
 
     def reset(self):
+        """
+        Reset RSU state between episodes.
+        """
 
         self.task_queue = []
 
@@ -197,11 +253,13 @@ class RSU:
 
         self.completed_tasks = []
 
+        self.r2r_rates = {}
 
 
-    # ---------------------------------------------------------
+
+    # =========================================================
     # Display
-    # ---------------------------------------------------------
+    # =========================================================
 
     def __repr__(self):
 
@@ -210,6 +268,7 @@ class RSU:
             if self.current_task
             else "idle"
         )
+
 
         return (
             f"RSU {self.rsu_id} | "
@@ -223,8 +282,6 @@ class RSU:
 
 
 
-
-
 # =============================================================
 # Verification
 # =============================================================
@@ -233,12 +290,13 @@ if __name__ == "__main__":
 
     from cotopsim.vehicle import Vehicle
 
+
     random.seed(42)
 
 
 
     # ---------------------------------------------------------
-    # CoTOP Table III parameters
+    # Table III parameters
     # ---------------------------------------------------------
 
     ROAD_LENGTH = 200.0
@@ -247,6 +305,7 @@ if __name__ == "__main__":
 
     COVERAGE_RADIUS = 400.0
 
+    CAPACITY = 2000.0       # midpoint of 1-4 Gcycles/s
 
 
     spacing = ROAD_LENGTH / NUM_RSUS
@@ -270,10 +329,12 @@ if __name__ == "__main__":
 
 
         if i > 1:
+
             neighbors.append(i - 1)
 
 
         if i < NUM_RSUS:
+
             neighbors.append(i + 1)
 
 
@@ -281,14 +342,14 @@ if __name__ == "__main__":
         rsus[i] = RSU(
             rsu_id=i,
             x=x,
-            capacity=random.uniform(1000, 4000),
+            capacity=CAPACITY,
             coverage_radius=COVERAGE_RADIUS,
             neighbor_ids=neighbors
         )
 
 
 
-    # Connect neighbor objects
+    # Link neighbors
 
     for rsu in rsus.values():
 
@@ -319,13 +380,6 @@ if __name__ == "__main__":
 
 
     rsu3 = rsus[3]
-
-
-    print(
-        f"Empty queue delay: "
-        f"{rsu3.waiting_delay():.6f}s"
-    )
-
 
 
     t1 = Task(
@@ -388,10 +442,12 @@ if __name__ == "__main__":
     )
 
 
+
     rsu_test.accept_task(
         t3,
         arrival_time=0.0
     )
+
 
 
     steps = 0
@@ -414,9 +470,11 @@ if __name__ == "__main__":
         f"Completed after {steps} steps"
     )
 
+
     print(
         f"Simulation time: {steps*0.001:.4f}s"
     )
+
 
     print(
         f"Status: {t3.status}"
@@ -443,6 +501,6 @@ if __name__ == "__main__":
 
         print(
             f"RSU {rsu.rsu_id} "
-            f"(x={rsu.x:.1f}m): "
+            f"(x={rsu.x:.2f}m): "
             f"in_range={rsu.in_range(vehicle)}"
         )
