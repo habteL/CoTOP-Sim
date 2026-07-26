@@ -1,0 +1,68 @@
+PS C:\Users\lejeb\Documents\CoTOP-Sim> pip install -e .
+>> python hello_cotop.py
+Obtaining file:///C:/Users/lejeb/Documents/CoTOP-Sim
+  Preparing metadata (setup.py) ... done
+Requirement already satisfied: torch>=2.0.0 in c:\users\lejeb\anaconda3\lib\site-packages (from cotopsim==0.1.0) (2.11.0+cpu)
+Requirement already satisfied: numpy>=1.21 in c:\users\lejeb\anaconda3\lib\site-packages (from cotopsim==0.1.0) (1.26.4)
+Requirement already satisfied: matplotlib>=3.4 in c:\users\lejeb\anaconda3\lib\site-packages (from cotopsim==0.1.0) (3.10.7)
+Requirement already satisfied: contourpy>=1.0.1 in c:\users\lejeb\anaconda3\lib\site-packages (from matplotlib>=3.4->cotopsim==0.1.0) (1.0.5)
+Requirement already satisfied: cycler>=0.10 in c:\users\lejeb\anaconda3\lib\site-packages (from matplotlib>=3.4->cotopsim==0.1.0) (0.11.0)
+Requirement already satisfied: fonttools>=4.22.0 in c:\users\lejeb\anaconda3\lib\site-packages (from matplotlib>=3.4->cotopsim==0.1.0) (4.25.0)
+Requirement already satisfied: kiwisolver>=1.3.1 in c:\users\lejeb\anaconda3\lib\site-packages (from matplotlib>=3.4->cotopsim==0.1.0) (1.4.4)
+Requirement already satisfied: packaging>=20.0 in c:\users\lejeb\anaconda3\lib\site-packages (from matplotlib>=3.4->cotopsim==0.1.0) (23.0)
+Requirement already satisfied: pillow>=8 in c:\users\lejeb\anaconda3\lib\site-packages (from matplotlib>=3.4->cotopsim==0.1.0) (9.4.0)
+Requirement already satisfied: pyparsing>=3 in c:\users\lejeb\anaconda3\lib\site-packages (from matplotlib>=3.4->cotopsim==0.1.0) (3.0.9)
+Requirement already satisfied: python-dateutil>=2.7 in c:\users\lejeb\anaconda3\lib\site-packages (from matplotlib>=3.4->cotopsim==0.1.0) (2.8.2)
+Requirement already satisfied: filelock in c:\users\lejeb\anaconda3\lib\site-packages (from torch>=2.0.0->cotopsim==0.1.0) (3.9.0)
+Requirement already satisfied: typing-extensions>=4.10.0 in c:\users\lejeb\anaconda3\lib\site-packages (from torch>=2.0.0->cotopsim==0.1.0) (4.15.0)
+Requirement already satisfied: setuptools<82 in c:\users\lejeb\anaconda3\lib\site-packages (from torch>=2.0.0->cotopsim==0.1.0) (68.0.0)
+Requirement already satisfied: sympy>=1.13.3 in c:\users\lejeb\anaconda3\lib\site-packages (from torch>=2.0.0->cotopsim==0.1.0) (1.14.0)
+Requirement already satisfied: networkx>=2.5.1 in c:\users\lejeb\anaconda3\lib\site-packages (from torch>=2.0.0->cotopsim==0.1.0) (3.1)
+Requirement already satisfied: jinja2 in c:\users\lejeb\anaconda3\lib\site-packages (from torch>=2.0.0->cotopsim==0.1.0) (3.1.2)
+Requirement already satisfied: fsspec>=0.8.5 in c:\users\lejeb\anaconda3\lib\site-packages (from torch>=2.0.0->cotopsim==0.1.0) (2023.3.0)
+Requirement already satisfied: six>=1.5 in c:\users\lejeb\anaconda3\lib\site-packages (from python-dateutil>=2.7->matplotlib>=3.4->cotopsim==0.1.0) (1.16.0)
+Requirement already satisfied: mpmath<1.4,>=1.1.0 in c:\users\lejeb\anaconda3\lib\site-packages (from sympy>=1.13.3->torch>=2.0.0->cotopsim==0.1.0) (1.3.0)
+Requirement already satisfied: MarkupSafe>=2.0 in c:\users\lejeb\anaconda3\lib\site-packages (from jinja2->torch>=2.0.0->cotopsim==0.1.0) (2.1.1)
+Installing collected packages: cotopsim
+  Running setup.py develop for cotopsim
+Successfully installed cotopsim-0.1.0
+Traceback (most recent call last):
+  File "C:\Users\lejeb\Documents\CoTOP-Sim\hello_cotop.py", line 3, in <module>
+    import torch
+  File "C:\Users\lejeb\anaconda3\Lib\site-packages\torch\__init__.py", line 285, in <module>
+    _load_dll_libraries()
+  File "C:\Users\lejeb\anaconda3\Lib\site-packages\torch\__init__.py", line 268, in _load_dll_libraries
+    raise err
+OSError: [WinError 1114] A dynamic link library (DLL) initialization routine failed. Error loading "C:\Users\lejeb\anaconda3\Lib\site-packages\torch\lib\c10.dll" or one of its dependencies.
+PS C:\Users\lejeb\Documents\CoTOP-Sim> git init
+>> git add .
+>> git commit -m "Sprint 0: Project setup and environment verification"
+>> git remote add origin https://github.com/habteL/CoTOP-Sim.git
+>> git branch -M main
+>> git push -u origin main
+Initialized empty Git repository in C:/Users/lejeb/Documents/CoTOP-Sim/.git/
+warning: in the working copy of 'src/cotopsim.egg-info/SOURCES.txt', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/cotopsim.egg-info/dependency_links.txt', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/cotopsim.egg-info/requires.txt', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/cotopsim.egg-info/top_level.txt', LF will be replaced by CRLF the next time Git touches it
+[master (root-commit) 0083143] Sprint 0: Project setup and environment verification
+ 10 files changed, 51 insertions(+)
+ create mode 100644 hello_cotop.py
+ create mode 100644 requirements.txt
+ create mode 100644 setup.py
+ create mode 100644 src/__init__.py
+ create mode 100644 src/cotopsim.egg-info/PKG-INFO
+ create mode 100644 src/cotopsim.egg-info/SOURCES.txt
+ create mode 100644 src/cotopsim.egg-info/dependency_links.txt
+ create mode 100644 src/cotopsim.egg-info/requires.txt
+ create mode 100644 src/cotopsim.egg-info/top_level.txt
+ create mode 100644 src/cotopsim/__init__.py
+Enumerating objects: 14, done.
+Counting objects: 100% (14/14), done.
+Delta compression using up to 12 threads
+Compressing objects: 100% (8/8), done.
+Writing objects: 100% (14/14), 1.57 KiB | 536.00 KiB/s, done.
+Total 14 (delta 0), reused 0 (delta 0), pack-reused 0 (from 0)
+To https://github.com/habteL/CoTOP-Sim.git
+ * [new branch]      main -> main
+branch 'main' set up to track 'origin/main'.
