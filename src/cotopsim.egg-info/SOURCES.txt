@@ -1,0 +1,7 @@
+setup.py
+src/cotopsim/__init__.py
+src/cotopsim.egg-info/PKG-INFO
+src/cotopsim.egg-info/SOURCES.txt
+src/cotopsim.egg-info/dependency_links.txt
+src/cotopsim.egg-info/requires.txt
+src/cotopsim.egg-info/top_level.txt

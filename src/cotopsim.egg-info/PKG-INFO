@@ -1,0 +1,6 @@
+Metadata-Version: 2.1
+Name: cotopsim
+Version: 0.1.0
+Summary: CoTOP: Mobility-Aware Collaborative Task Offloading Simulator
+Author: Dr. Habte Lejebo
+Requires-Python: >=3.8
