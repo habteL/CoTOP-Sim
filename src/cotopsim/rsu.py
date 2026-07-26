@@ -1,189 +1,448 @@
-import math
+import random
 from cotopsim.task import Task
+
 
 class RSU:
     """
     CoTOP Road-Side Unit (RSU) model.
-    Models an M/M/1 queue with collaborative offloading support.
+
+    Features:
+    - M/M/1 computation queue
+    - Task processing
+    - Waiting delay calculation
+    - RSU collaboration structure
+    - 400m coverage from Table III
     """
 
-    def __init__(self, rsu_id, x, capacity, coverage_radius,
+
+    def __init__(self,
+                 rsu_id,
+                 x,
+                 capacity,
+                 coverage_radius,
                  neighbor_ids=None):
-        # ── Identity and position ─────────────────────────────
-        self.rsu_id          = rsu_id
-        self.x               = x                 # metres
-        self.capacity        = capacity           # F_m, Mcycles/second
-        self.coverage_radius = coverage_radius    # metres
 
-        # ── Neighbor RSUs for collaboration ───────────────────
-        self.neighbor_ids    = neighbor_ids or [] # adjacent RSU IDs
-        self.neighbors       = {}  # filled in by environment: {id: RSU}
+        # Identity and position
+        self.rsu_id = rsu_id
+        self.x = x                          # metres
+        self.capacity = capacity            # Mcycles/s (1-4 Gcycles/s)
+        self.coverage_radius = coverage_radius
 
-        # ── Task queue (M/M/1) ────────────────────────────────
-        self.task_queue      = []   # waiting tasks
-        self.current_task    = None # task being processed
+
+        # Neighbor RSUs
+        self.neighbor_ids = neighbor_ids or []
+        self.neighbors = {}                  # {id: RSU}
+
+
+        # M/M/1 queue
+        self.task_queue = []
+        self.current_task = None
         self.tasks_processed = 0
 
-        # ── Per-step event buffers ────────────────────────────
-        self.completed_tasks = []   # cleared each step
 
-        # ── R2R transmission rates (computed once at setup) ───
-        self.r2r_rates       = {}   # {neighbor_id: rate Mbps}
+        # Completed tasks in current step
+        self.completed_tasks = []
 
-    # ── Coverage ─────────────────────────────────────────────
+
+        # R2R communication rates
+        self.r2r_rates = {}
+
+
+
+    # ---------------------------------------------------------
+    # Coverage
+    # ---------------------------------------------------------
+
     def in_range(self, vehicle):
-        """True if vehicle is within wireless coverage."""
-        return abs(self.x - vehicle.x) <= self.coverage_radius
+        """
+        Check whether vehicle is inside RSU coverage.
+        """
+        distance = abs(self.x - vehicle.x)
 
-    # ── Queue metrics ─────────────────────────────────────────
+        return distance <= self.coverage_radius
+
+
+
+    # ---------------------------------------------------------
+    # Queue calculation
+    # ---------------------------------------------------------
+
     def queued_cycles(self):
         """
-        N_m^queue(t) — total CPU cycles of tasks waiting in queue.
-        Used in waiting delay calculation (Eq. 5).
+        Total remaining computation cycles.
+
+        N_queue(t) = waiting tasks + current processing task
         """
-        total = sum(t.remaining_cycles for t in self.task_queue)
+
+        total = sum(
+            task.remaining_cycles
+            for task in self.task_queue
+        )
+
+
         if self.current_task is not None:
             total += self.current_task.remaining_cycles
+
+
         return total
+
+
 
     def waiting_delay(self):
         """
-        T_m,i^wait(t) = N_m^queue(t) / F_m^RSU  (Eq. 5)
-        Returns waiting delay in seconds for next arriving task.
+        Eq. (5):
+
+        T_wait = N_queue / F_RSU
+
+        Unit:
+        Mcycles / (Mcycles/s) = seconds
         """
+
+        if self.capacity <= 0:
+            return float("inf")
+
+
         return self.queued_cycles() / self.capacity
 
-    # ── Task acceptance ───────────────────────────────────────
+
+
+    # ---------------------------------------------------------
+    # Task management
+    # ---------------------------------------------------------
+
     def accept_task(self, task, arrival_time):
-        """Accept a task into the processing queue."""
-        task.arrival_time    = arrival_time
-        task.waiting_delay   = self.waiting_delay()
+        """
+        Add task into RSU computation queue.
+        """
+
+        task.arrival_time = arrival_time
+
+        # waiting caused by existing tasks
+        task.waiting_delay = self.waiting_delay()
+
+        task.queue_enter_time = arrival_time
+
         task.assigned_rsu_id = self.rsu_id
-        task.status          = Task.STATUS_QUEUED
+
+        task.status = Task.STATUS_QUEUED
+
+
         self.task_queue.append(task)
 
-    # ── Processing tick ───────────────────────────────────────
+
+
+    # ---------------------------------------------------------
+    # Processing
+    # ---------------------------------------------------------
+
     def tick(self, dt=1.0):
         """
         Advance RSU computation by dt seconds.
-        Processes current task; pulls next from queue when idle.
+
+        Processing speed:
+            capacity * dt
         """
-        # Pull from queue if idle
-        if self.current_task is None and self.task_queue:
-            self.current_task        = self.task_queue.pop(0)
-            self.current_task.status = Task.STATUS_PROCESSING
+
+        # Assign next task if idle
+        if self.current_task is None:
+
+            if self.task_queue:
+
+                self.current_task = self.task_queue.pop(0)
+
+                self.current_task.status = Task.STATUS_PROCESSING
+
 
         if self.current_task is None:
             return
 
-        # Process cycles
-        cycles_done = self.capacity * dt
-        self.current_task.remaining_cycles -= cycles_done
 
-        # Task complete
+
+        # Compute cycles
+        cycles_processed = self.capacity * dt
+
+        self.current_task.remaining_cycles -= cycles_processed
+
+
+
+        # Completion check
         if self.current_task.remaining_cycles <= 0:
+
             self.current_task.remaining_cycles = 0
-            self.current_task.status           = Task.STATUS_COMPLETED
-            self.tasks_processed              += 1
-            self.completed_tasks.append(self.current_task)
+
+            self.current_task.status = Task.STATUS_COMPLETED
+
+            self.tasks_processed += 1
+
+            self.completed_tasks.append(
+                self.current_task
+            )
+
+
             self.current_task = None
 
-            # Pull next task immediately
-            if self.task_queue:
-                self.current_task        = self.task_queue.pop(0)
-                self.current_task.status = Task.STATUS_PROCESSING
 
-    # ── Reset ────────────────────────────────────────────────
+
+    # ---------------------------------------------------------
+    # Episode reset
+    # ---------------------------------------------------------
+
     def reset(self):
-        """Reset all state between episodes."""
-        self.task_queue      = []
-        self.current_task    = None
+
+        self.task_queue = []
+
+        self.current_task = None
+
         self.tasks_processed = 0
+
         self.completed_tasks = []
 
+
+
+    # ---------------------------------------------------------
+    # Display
+    # ---------------------------------------------------------
+
     def __repr__(self):
-        busy = "busy" if self.current_task else "idle"
-        return (f"RSU {self.rsu_id} | x={self.x:.1f}m | "
-                f"capacity={self.capacity}Mc/s | "
-                f"status={busy} | "
-                f"queue={len(self.task_queue)} tasks | "
-                f"queued_cycles={self.queued_cycles():.1f}Mc | "
-                f"neighbors={self.neighbor_ids}")
 
-
-if __name__ == "__main__":
-    import random
-    from cotopsim.vehicle import Vehicle
-    random.seed(42)
-
-    # ── Build 6 RSUs ─────────────────────────────────────────
-    ROAD_LENGTH     = 200.0
-    NUM_RSUS        = 6
-    COVERAGE_RADIUS = 16.67
-    CAPACITY        = 1000.0  # Mcycles/second (1 GHz)
-    spacing         = ROAD_LENGTH / NUM_RSUS
-
-    rsus = {}
-    for i in range(1, NUM_RSUS + 1):
-        x           = spacing * (i - 0.5)
-        neighbor_ids = []
-        if i > 1:
-            neighbor_ids.append(i - 1)
-        if i < NUM_RSUS:
-            neighbor_ids.append(i + 1)
-        rsus[i] = RSU(
-            rsu_id          = i,
-            x               = x,
-            capacity        = CAPACITY,
-            coverage_radius = COVERAGE_RADIUS,
-            neighbor_ids    = neighbor_ids
+        state = (
+            "busy"
+            if self.current_task
+            else "idle"
         )
 
-    # Link neighbor objects
-    for rsu in rsus.values():
-        rsu.neighbors = {nid: rsus[nid] for nid in rsu.neighbor_ids}
+        return (
+            f"RSU {self.rsu_id} | "
+            f"x={self.x:.2f}m | "
+            f"capacity={self.capacity:.1f}Mc/s | "
+            f"coverage={self.coverage_radius}m | "
+            f"{state} | "
+            f"queue={len(self.task_queue)} | "
+            f"neighbors={self.neighbor_ids}"
+        )
 
-    print("=== Sprint 3: RSU Class Verification ===")
+
+
+
+
+# =============================================================
+# Verification
+# =============================================================
+
+if __name__ == "__main__":
+
+    from cotopsim.vehicle import Vehicle
+
+    random.seed(42)
+
+
+
+    # ---------------------------------------------------------
+    # CoTOP Table III parameters
+    # ---------------------------------------------------------
+
+    ROAD_LENGTH = 200.0
+
+    NUM_RSUS = 6
+
+    COVERAGE_RADIUS = 400.0
+
+
+
+    spacing = ROAD_LENGTH / NUM_RSUS
+
+
+
+    rsus = {}
+
+
+
+    # ---------------------------------------------------------
+    # Create RSUs
+    # ---------------------------------------------------------
+
+    for i in range(1, NUM_RSUS + 1):
+
+        x = spacing * (i - 0.5)
+
+
+        neighbors = []
+
+
+        if i > 1:
+            neighbors.append(i - 1)
+
+
+        if i < NUM_RSUS:
+            neighbors.append(i + 1)
+
+
+
+        rsus[i] = RSU(
+            rsu_id=i,
+            x=x,
+            capacity=random.uniform(1000, 4000),
+            coverage_radius=COVERAGE_RADIUS,
+            neighbor_ids=neighbors
+        )
+
+
+
+    # Connect neighbor objects
+
+    for rsu in rsus.values():
+
+        rsu.neighbors = {
+            nid: rsus[nid]
+            for nid in rsu.neighbor_ids
+        }
+
+
+
+    print("=== Sprint 3: Revised RSU Verification ===")
+
+
+
     print("\n--- RSU Configuration ---")
+
     for rsu in rsus.values():
-        print(f"  {rsu}")
 
-    # ── Test waiting delay ────────────────────────────────────
-    print("\n--- Waiting delay test ---")
+        print(rsu)
+
+
+
+    # ---------------------------------------------------------
+    # Waiting delay test
+    # ---------------------------------------------------------
+
+    print("\n--- Waiting Delay Test ---")
+
+
     rsu3 = rsus[3]
-    print(f"RSU 3 empty queue waiting delay: {rsu3.waiting_delay():.3f}s")
 
-    # Manually add tasks to queue
-    t1 = Task("t1", 1, size=5.0, cpu_cycles=8.0, deadline=20.0)
-    t2 = Task("t2", 1, size=3.0, cpu_cycles=5.0, deadline=15.0)
-    rsu3.accept_task(t1, arrival_time=0.0)
-    rsu3.accept_task(t2, arrival_time=0.0)
-    print(f"After 2 tasks (8+5=13 Mc queued):")
-    print(f"  queued_cycles = {rsu3.queued_cycles():.1f}Mc")
-    print(f"  waiting_delay = {rsu3.waiting_delay():.4f}s")
-    print(f"  expected      = {13.0/CAPACITY:.4f}s")
 
-    # ── Test tick processing ──────────────────────────────────
-    print("\n--- Tick processing test (dt=0.001s) ---")
-    rsu3_test = rsus[3]
-    rsu3_test.reset()
-    t3 = Task("t3", 2, size=2.0, cpu_cycles=2.0, deadline=10.0)
-    rsu3_test.accept_task(t3, arrival_time=0.0)
-    print(f"Task accepted: {t3.status}")
+    print(
+        f"Empty queue delay: "
+        f"{rsu3.waiting_delay():.6f}s"
+    )
+
+
+
+    t1 = Task(
+        "t1",
+        1,
+        size=25.0,
+        cpu_cycles=8.0,
+        deadline=20.0
+    )
+
+
+    t2 = Task(
+        "t2",
+        1,
+        size=18.0,
+        cpu_cycles=5.0,
+        deadline=25.0
+    )
+
+
+
+    rsu3.accept_task(t1, 0.0)
+
+    rsu3.accept_task(t2, 0.0)
+
+
+
+    print(
+        f"Queued cycles: "
+        f"{rsu3.queued_cycles():.2f} Mc"
+    )
+
+
+    print(
+        f"Waiting delay: "
+        f"{rsu3.waiting_delay():.6f}s"
+    )
+
+
+
+    # ---------------------------------------------------------
+    # Processing test
+    # ---------------------------------------------------------
+
+    print("\n--- Processing Test ---")
+
+
+    rsu_test = rsus[3]
+
+    rsu_test.reset()
+
+
+
+    t3 = Task(
+        "t3",
+        2,
+        size=20.0,
+        cpu_cycles=2.0,
+        deadline=20.0
+    )
+
+
+    rsu_test.accept_task(
+        t3,
+        arrival_time=0.0
+    )
+
 
     steps = 0
-    while t3.status != Task.STATUS_COMPLETED and steps < 100:
-        rsu3_test.tick(dt=0.001) #dt=0.001s
+
+
+    while (
+        t3.status != Task.STATUS_COMPLETED
+        and steps < 100
+    ):
+
+        rsu_test.tick(
+            dt=0.001
+        )
+
         steps += 1
 
-    print(f"Task completed after {steps} steps of dt=0.001s")
-    print(f"Total time: {steps * 0.001:.3f}s")
-    print(f"Expected:   {2.0/CAPACITY:.3f}s")
-    print(f"Status: {t3.status}")
 
-    # ── Test coverage ─────────────────────────────────────────
-    print("\n--- Coverage test ---")
-    v = Vehicle(vehicle_id=1, x=80.0, speed=10.0)
+
+    print(
+        f"Completed after {steps} steps"
+    )
+
+    print(
+        f"Simulation time: {steps*0.001:.4f}s"
+    )
+
+    print(
+        f"Status: {t3.status}"
+    )
+
+
+
+    # ---------------------------------------------------------
+    # Coverage test
+    # ---------------------------------------------------------
+
+    print("\n--- Coverage Test ---")
+
+
+    vehicle = Vehicle(
+        vehicle_id=1,
+        x=80.0,
+        speed=35.0
+    )
+
+
+
     for rsu in rsus.values():
-        print(f"  RSU {rsu.rsu_id} (x={rsu.x:.1f}): "
-              f"in_range={rsu.in_range(v)}")
+
+        print(
+            f"RSU {rsu.rsu_id} "
+            f"(x={rsu.x:.1f}m): "
+            f"in_range={rsu.in_range(vehicle)}"
+        )
