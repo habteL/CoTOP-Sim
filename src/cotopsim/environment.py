@@ -16,7 +16,7 @@ class CoToPEnvironment:
     COVERAGE_RADIUS = 400.0
     RSU_CAPACITY    = 2000.0   # Mcycles/s
     MAX_TASKS       = 3        # I — max tasks per slot
-    STATE_DIM       = 20
+    STATE_DIM       = 21
     ACTION_DIM      = 7        # 0=standalone, 1-6=collaborate
     PENALTY_Z       = 10.0
 
@@ -116,10 +116,14 @@ class CoToPEnvironment:
         """
         v = self.vehicles[0]   # Phase 1: single vehicle
 
-        # Vehicle features (2)
+        # Vehicle features (3) — add dwell time
+        serving_rsu = self._find_serving_rsu(v)
+        t_stay = v.estimate_dwell_time(serving_rsu) if serving_rsu else 0.0
+
         sv = [
-            v.x    / self.NORM_X,
-            v.speed / self.NORM_SPEED
+            v.x     / self.NORM_X,
+            v.speed / self.NORM_SPEED,
+            min(t_stay, 30.0) / 30.0   # normalize dwell time
         ]
 
         # Task features (12) — pad with zeros if < 3 tasks
@@ -149,16 +153,7 @@ class CoToPEnvironment:
             f"State dim mismatch: {len(state)} != {self.STATE_DIM}"
         return np.array(state, dtype=np.float32)
     def step(self, action, current_task=None):
-        """
-        Execute one scheduling decision.
-
-        Args:
-            action:       int 0-6 (0=standalone, 1-6=collaborate with RSU)
-            current_task: Task to schedule (None = use first pending)
-
-        Returns:
-            next_state, reward, done, info
-        """
+        
         self.step_count += 1
 
         # ── Get current vehicle and task ──────────────────────
@@ -186,41 +181,18 @@ class CoToPEnvironment:
         t1 = v.estimate_dwell_time(serving_rsu)
 
         # ── Execute action ────────────────────────────────────
-        if action == 0 or not self.comp_model.needs_collaboration(
-                current_task, t1, serving_rsu):
-            # Case 1: Standalone
-            delay  = self.comp_model.total_standalone_delay(
-            current_task, v, serving_rsu, self.channel)
-            energy = self.comp_model.total_energy(current_task)
-            current_task.assigned_rsu_id = serving_rsu.rsu_id
-            current_task.source_rsu_id   = serving_rsu.rsu_id
-            serving_rsu.accept_task(current_task,
-                                    arrival_time=self.step_count)
+        if action == 0:
+            rsu_target = serving_rsu
         else:
-            # Case 2: Collaborative
-            collab_rsu_id = action  # action 1-6 = RSU ID
-            if collab_rsu_id not in self.rsus:
-                collab_rsu_id = serving_rsu.neighbor_ids[0] \
-                    if serving_rsu.neighbor_ids else None
+            rsu_target = self.rsus.get(action, serving_rsu)
 
-            if collab_rsu_id is None:
-                # No neighbor — fallback to standalone
-                delay, energy = self.comp_model.evaluate_standalone(
-                    current_task, v, serving_rsu, self.channel)
-                serving_rsu.accept_task(current_task,
-                                        arrival_time=self.step_count)
-            else:
-                collab_rsu = self.rsus[collab_rsu_id]
-                delay, energy, _ = self.comp_model.evaluate_collaborative(
-                    current_task, v, serving_rsu,
-                    collab_rsu, self.channel, t1)
-                collab_rsu.accept_task(current_task,
-                                       arrival_time=self.step_count)
-    #     print(f"  task={current_task.task_id} "
-    #   f"action={action} "
-    #   f"delay={delay:.3f}s "
-    #   f"deadline={current_task.deadline:.1f}s "
-    #   f"fail={delay > current_task.deadline}")
+        delay  = self.comp_model.total_standalone_delay(
+            current_task, v, rsu_target, self.channel)
+        energy = self.comp_model.total_energy(current_task)
+        current_task.assigned_rsu_id = rsu_target.rsu_id
+        current_task.source_rsu_id   = serving_rsu.rsu_id
+        rsu_target.accept_task(current_task,
+                            arrival_time=self.step_count)
         # ── Compute reward (Eq. 25) ───────────────────────────
         if delay > current_task.deadline:
             reward = -self.PENALTY_Z
@@ -288,11 +260,10 @@ class CoToPEnvironment:
         return self.all_tasks
 
     def get_metrics(self):
-        # Count pending as unfinished (not failed)
-        pending  = sum(1 for t in self.all_tasks
-                    if t.status == Task.STATUS_PENDING)
-        failed   = self.episode_metrics['failed']
+        pending   = sum(1 for t in self.all_tasks
+                        if t.status == Task.STATUS_PENDING)
         completed = self.episode_metrics['completed']
+        failed    = self.episode_metrics['failed'] + pending
         generated = self.episode_metrics['generated']
 
         return {
