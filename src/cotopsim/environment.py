@@ -108,13 +108,17 @@ class CoToPEnvironment:
         }
 
         return self._get_state()
-
-    def _get_state(self):
+    
+    def _get_state(self, task=None):
         """
         Build 20-dimensional state vector.
-        s(t) = [s_v, s_task, s_RSU]
+        s(t) = [s_v, s_task, s_RSU] 
         """
-        v = self.vehicles[0]   # Phase 1: single vehicle
+        if task is not None:
+            v = next(veh for veh in self.vehicles 
+                    if veh.vehicle_id == task.owner_id)
+        else:
+            v = self.vehicles[0]   # Phase 1: single vehicle
 
         # Vehicle features (3) — add dwell time
         serving_rsu = self._find_serving_rsu(v)
@@ -156,16 +160,15 @@ class CoToPEnvironment:
         
         self.step_count += 1
 
-        # ── Get current vehicle and task ──────────────────────
-        v = self.vehicles[0]
-
         if current_task is None:
             pending = [t for t in self.all_tasks
                        if t.status == Task.STATUS_PENDING]
             if not pending:
                 return self._get_state(), 0.0, True, {}
             current_task = pending[0]
-
+        # Find vehicle that owns this task
+        v = next(veh for veh in self.vehicles
+                if veh.vehicle_id == current_task.owner_id)
         # ── Find serving RSU ──────────────────────────────────
         serving_rsu = self._find_serving_rsu(v)
         if serving_rsu is None:
@@ -209,7 +212,8 @@ class CoToPEnvironment:
         self.episode_metrics['total_energy'] += energy
 
         # ── Move vehicle and tick RSUs ────────────────────────
-        v.move(dt=1.0)
+        for veh in self.vehicles:
+            veh.move(dt=1.0)
         for rsu in self.rsus.values():
             rsu.tick(dt=1.0)
             rsu.completed_tasks.clear()
@@ -241,21 +245,25 @@ class CoToPEnvironment:
         )
         return self.step_count >= self.max_steps or all_done
 
+    # generate_episode_tasks() — generate per vehicle:
     def generate_episode_tasks(self, target_tasks=25):
-        """Pre-generate tasks for one episode (paper: 20-40 tasks)."""
         self.all_tasks = []
-        v = self.vehicles[0]
-        while len(self.all_tasks) < target_tasks:
-            tasks = v.generate_tasks(current_time=len(self.all_tasks))
-            self.all_tasks.extend(tasks)
-        self.all_tasks = self.all_tasks[:target_tasks]  # trim to exact count
+        tasks_per_vehicle = target_tasks // self.num_vehicles
+        for v in self.vehicles:
+            while len([t for t in self.all_tasks 
+                    if t.owner_id == v.vehicle_id]) < tasks_per_vehicle:
+                new_tasks = v.generate_tasks(
+                    current_time=len(self.all_tasks))
+                self.all_tasks.extend(new_tasks)
+        self.all_tasks = self.all_tasks[:target_tasks]
         self.episode_metrics['generated'] = len(self.all_tasks)
-
-        # Compute priorities
-        t_stay = v.estimate_dwell_time(
-            list(self.rsus.values())[2]  # reference RSU 3
-        )
-        t_stay_map = {t.task_id: t_stay for t in self.all_tasks}
+        # Priority sort
+        t_stay_map = {}
+        for t in self.all_tasks:
+            owner = next(v for v in self.vehicles 
+                        if v.vehicle_id == t.owner_id)
+            ref_rsu = list(self.rsus.values())[2]
+            t_stay_map[t.task_id] = owner.estimate_dwell_time(ref_rsu)
         self.priority.sort_tasks(self.all_tasks, t_stay_map)
         return self.all_tasks
 
@@ -291,7 +299,7 @@ if __name__ == "__main__":
 
     print("=== Sprint 9: Environment Verification ===")
 
-    env = CoToPEnvironment(num_vehicles=1, max_steps=50, seed=42)
+    env = CoToPEnvironment(num_vehicles=10, max_steps=50, seed=42)
     print(f"\n{env}")
 
     # ── Test 1: Reset ─────────────────────────────────────────

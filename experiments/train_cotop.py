@@ -31,8 +31,8 @@ METRICS_PATH   = os.path.join(
 
 # ── Build environment and agent ───────────────────────────────
 env   = CoToPEnvironment(
-    num_vehicles = 1,
-    max_steps    = TASKS_PER_EP + 10,
+    num_vehicles = 10,
+    max_steps    = TASKS_PER_EP * 2,
     sigma        = SIGMA,
     seed         = SEED
 )

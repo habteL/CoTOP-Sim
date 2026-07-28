@@ -7,7 +7,7 @@ import numpy as np
 from cotopsim.environment import CoToPEnvironment
 
 SEED         = 42
-NUM_EPISODES = 1
+NUM_EPISODES = 10
 TASKS_PER_EP = 25
 
 def run_policy(policy_fn, policy_name, num_episodes=NUM_EPISODES):
@@ -36,10 +36,10 @@ def run_policy(policy_fn, policy_name, num_episodes=NUM_EPISODES):
         metrics['total_reward'] = total_reward
         results.append(metrics)
     metrics = env.get_metrics()
-    print(f"completed={metrics['completed']} "
-        f"failed={metrics['failed']} "
-        f"pending={metrics['pending']} "
-        f"generated={metrics['generated']}")
+    # print(f"completed={metrics['completed']} "
+    #     f"failed={metrics['failed']} "
+    #     f"pending={metrics['pending']} "
+    #     f"generated={metrics['generated']}")
     metrics['total_reward'] = total_reward
     results.append(metrics)
     avg = {
