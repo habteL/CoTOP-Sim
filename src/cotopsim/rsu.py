@@ -206,25 +206,21 @@ class RSU:
 
 
             self.current_task.remaining_cycles = 0
+            self.current_task.processing_delay = (      # ADD THIS LINE
+                self.current_task.cpu_cycles / self.capacity
+            )
 
 
             self.current_task.status = (
                 Task.STATUS_COMPLETED
             )
 
-
+            self.completed_tasks.append(
+                            self.current_task
+                        )
             self.tasks_processed += 1
 
-
-            self.completed_tasks.append(
-                self.current_task
-            )
-
-
             self.current_task = None
-
-
-
             # Immediately start next task
             if self.task_queue:
 
