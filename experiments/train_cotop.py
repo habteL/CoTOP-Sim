@@ -8,7 +8,7 @@ import csv
 import torch
 from cotopsim.environment import CoToPEnvironment
 from cotopsim.agent       import A3CAgent
-
+from cotopsim.priority import PriorityAlgorithm 
 # ── Reproducibility ───────────────────────────────────────────
 SEED = 42
 random.seed(SEED)
@@ -16,7 +16,7 @@ np.random.seed(SEED)
 torch.manual_seed(SEED)
 
 # ── Hyperparameters ───────────────────────────────────────────
-NUM_EPISODES   = 100
+NUM_EPISODES   = 500
 TASKS_PER_EP   = 25
 UPDATE_FREQ    = 25      # update agent every N tasks
 STATE_DIM      = 21
@@ -24,10 +24,13 @@ ACTION_DIM     = 7
 LR             = 0.0002  # paper Table III best lr
 GAMMA          = 0.99
 SIGMA          = 0.3     # paper optimal α (delay/energy weight)
-SAVE_PATH      = os.path.join(
-    os.path.dirname(__file__), '..', 'results', 'cotop_agent.pt')
-METRICS_PATH   = os.path.join(
-    os.path.dirname(__file__), '..', 'results', 'train_metrics.csv')
+
+priority_model = PriorityAlgorithm(alpha=0.3, beta=0.7)
+SAVE_PATH = os.path.join(
+    os.path.dirname(__file__), '..', 'results', 'cotop_agent_500ep.pt')
+
+METRICS_PATH = os.path.join(
+    os.path.dirname(__file__), '..', 'results', 'train_metrics_500ep.csv')
 
 # ── Build environment and agent ───────────────────────────────
 env   = CoToPEnvironment(
@@ -60,7 +63,32 @@ for episode in range(NUM_EPISODES):
     env.seed = SEED + episode
     state = env.reset()
     state1 = env._get_state()
-    tasks = env.generate_episode_tasks(target_tasks=TASKS_PER_EP)
+    tasks = env.generate_episode_tasks(
+        target_tasks=TASKS_PER_EP
+    )
+
+    # Algorithm 1 Line 10-11:
+    # Compute task priority and sort tasks
+    serving_rsu = env._find_serving_rsu(
+        env.vehicles[0]
+    )
+
+    if serving_rsu:
+        t_stay = env.vehicles[0].estimate_dwell_time(
+            serving_rsu
+        )
+    else:
+        t_stay = 1.0
+
+    t_stay_map = {
+        task.task_id: t_stay
+        for task in tasks
+    }
+
+    tasks = priority_model.sort_tasks(
+        tasks,
+        t_stay_map
+    )
 
     episode_reward    = 0.0
     actor_losses      = []
